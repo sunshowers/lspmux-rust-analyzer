@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./setup)",
+      "Bash(chmod:*)",
+      "Bash(systemctl:*)",
+      "Bash(claude plugin:*)",
+      "Bash(~/.local/share/lspmux-rust-analyzer/current/rust-analyzer:*)",
+      "Bash(~/.local/share/lspmux-rust-analyzer/bin/update-rust-analyzer)",
+      "Bash(just:*)",
+      "Bash(shellcheck:*)",
+      "WebFetch(domain:api.github.com)"
+    ]
+  }
+}

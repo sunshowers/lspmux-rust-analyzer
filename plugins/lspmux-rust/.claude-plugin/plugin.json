@@ -1,0 +1,14 @@
+{
+  "name": "lspmux-rust",
+  "version": "1.0.0",
+  "description": "Rust LSP via lspmux multiplexer for shared rust-analyzer instances",
+  "lspServers": {
+    "rust-analyzer": {
+      "command": "${CLAUDE_PLUGIN_ROOT}/bin/lspmux",
+      "args": ["client", "--server-path", "${CLAUDE_PLUGIN_ROOT}/bin/rust-analyzer"],
+      "extensionToLanguage": {
+        ".rs": "rust"
+      }
+    }
+  }
+}

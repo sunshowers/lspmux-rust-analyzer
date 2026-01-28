@@ -1,0 +1,25 @@
+#!/bin/bash
+# Wrapper to find lspmux binary at runtime.
+# Checks CARGO_HOME, then common installation locations.
+set -euo pipefail
+
+find_lspmux() {
+    local cargo_home="${CARGO_HOME:-$HOME/.cargo}"
+
+    # Primary location: cargo bin directory.
+    if [[ -x "$cargo_home/bin/lspmux" ]]; then
+        echo "$cargo_home/bin/lspmux"
+        return
+    fi
+
+    # Fallback: check PATH.
+    if command -v lspmux >/dev/null 2>&1; then
+        command -v lspmux
+        return
+    fi
+
+    echo "error: lspmux not found. Install with: cargo install --locked lspmux" >&2
+    exit 1
+}
+
+exec "$(find_lspmux)" "$@"

@@ -1,0 +1,15 @@
+#!/bin/bash
+# Wrapper to find rust-analyzer binary at runtime.
+# Uses XDG_DATA_HOME with standard fallback.
+set -euo pipefail
+
+RA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/lspmux-rust-analyzer"
+RA_BIN="$RA_DIR/current/rust-analyzer"
+
+if [[ ! -x "$RA_BIN" ]]; then
+    echo "error: rust-analyzer not found at $RA_BIN" >&2
+    echo "Run the setup script to install rust-analyzer." >&2
+    exit 1
+fi
+
+exec "$RA_BIN" "$@"

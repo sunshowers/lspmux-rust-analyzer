@@ -1,0 +1,11 @@
+[Unit]
+Description=Update rust-analyzer to latest release
+Documentation=https://rust-analyzer.github.io/
+
+[Service]
+Type=oneshot
+ExecStart=UPDATE_SCRIPT_PLACEHOLDER
+# XDG environment variables are inherited from the user session.
+# These are fallbacks in case the session doesn't set them.
+Environment=XDG_DATA_HOME=%h/.local/share
+Environment=XDG_STATE_HOME=%h/.local/state

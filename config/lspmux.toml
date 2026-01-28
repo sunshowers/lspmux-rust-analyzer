@@ -1,0 +1,17 @@
+# lspmux configuration
+# See: https://codeberg.org/p2502/lspmux
+
+# Keep server running for 5 minutes after last client disconnects.
+instance_timeout = 300
+
+# Check for idle servers every 10 seconds.
+gc_interval = 10
+
+# Listen on localhost only (format: [address, port]).
+listen = ["127.0.0.1", 27631]
+
+# Client connection address (should match listen).
+connect = ["127.0.0.1", 27631]
+
+# Forward these environment variables to rust-analyzer.
+pass_environment = ["CARGO_HOME", "RUSTUP_HOME", "PATH", "HOME", "USER"]

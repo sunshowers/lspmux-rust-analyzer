@@ -1,0 +1,13 @@
+{
+  "name": "lspmux-plugins",
+  "owner": {
+    "name": "rain"
+  },
+  "plugins": [
+    {
+      "name": "lspmux-rust",
+      "source": "./plugins/lspmux-rust",
+      "description": "Rust LSP via lspmux multiplexer for shared rust-analyzer instances"
+    }
+  ]
+}

@@ -1,0 +1,199 @@
+#!/bin/bash
+# Downloads the latest rust-analyzer release from GitHub.
+# Keeps the last 3 versions as backups; updates symlink atomically.
+set -euo pipefail
+
+# XDG base directories with standard fallbacks.
+XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
+XDG_STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
+
+RA_DIR="$XDG_DATA_HOME/lspmux-rust-analyzer"
+VERSIONS_DIR="$RA_DIR/versions"
+LOG_DIR="$XDG_STATE_HOME/lspmux-rust-analyzer"
+LOG="$LOG_DIR/update.log"
+
+log() {
+    mkdir -p "$LOG_DIR"
+    echo "[$(date -Iseconds)] $*" >> "$LOG"
+}
+
+die() {
+    log "FATAL: $*"
+    echo "error: $*" >&2
+    exit 1
+}
+
+# Determine platform.
+detect_platform() {
+    local os arch
+    os=$(uname -s)
+    arch=$(uname -m)
+
+    case "$os-$arch" in
+        Linux-x86_64)   echo "x86_64-unknown-linux-gnu" ;;
+        Linux-aarch64)  echo "aarch64-unknown-linux-gnu" ;;
+        Darwin-x86_64)  echo "x86_64-apple-darwin" ;;
+        Darwin-arm64)   echo "aarch64-apple-darwin" ;;
+        *)              die "Unsupported platform: $os-$arch" ;;
+    esac
+}
+
+# Fetch release metadata from GitHub API.
+fetch_release_info() {
+    local tmp_json asset_name
+    tmp_json=$(mktemp)
+    trap 'rm -f "$tmp_json"' RETURN
+
+    curl -sf --retry 3 --retry-delay 5 \
+        -H "Accept: application/vnd.github+json" \
+        "https://api.github.com/repos/rust-lang/rust-analyzer/releases/latest" \
+        > "$tmp_json" \
+        || die "Failed to fetch release info from GitHub API"
+
+    RELEASE_TAG=$(jq -r '.tag_name' "$tmp_json")
+
+    # Asset name follows the pattern rust-analyzer-$PLATFORM.gz.
+    asset_name="rust-analyzer-${PLATFORM}.gz"
+
+    RELEASE_URL=$(jq -r --arg name "$asset_name" '.assets[] | select(.name == $name) | .browser_download_url' "$tmp_json")
+    RELEASE_DIGEST=$(jq -r --arg name "$asset_name" '.assets[] | select(.name == $name) | .digest // empty' "$tmp_json")
+
+    if [[ -z "$RELEASE_TAG" || "$RELEASE_TAG" == "null" ]]; then
+        die "Failed to parse release tag from GitHub API response"
+    fi
+
+    if [[ -z "$RELEASE_URL" || "$RELEASE_URL" == "null" ]]; then
+        die "No release artifact found for platform: $PLATFORM (expected $asset_name)"
+    fi
+}
+
+# Check if we already have this version.
+check_existing() {
+    local tag_file="$VERSION_DIR/.release-tag"
+    if [[ -d "$VERSION_DIR" && -f "$tag_file" ]]; then
+        local existing_tag
+        existing_tag=$(cat "$tag_file")
+        if [[ "$existing_tag" == "$RELEASE_TAG" ]]; then
+            log "Already up to date: $RELEASE_TAG"
+            echo "rust-analyzer is already up to date: $RELEASE_TAG"
+            exit 0
+        fi
+    fi
+}
+
+# Verify SHA256 checksum of downloaded file.
+verify_checksum() {
+    local file="$1" expected="$2"
+
+    if [[ -z "$expected" ]]; then
+        log "Warning: no checksum available, skipping verification"
+        return 0
+    fi
+
+    # Extract hash from "sha256:<hash>" format.
+    local hash="${expected#sha256:}"
+    if [[ "$hash" == "$expected" ]]; then
+        log "Warning: unexpected digest format '$expected', skipping verification"
+        return 0
+    fi
+
+    local actual
+    actual=$(sha256sum "$file" | cut -d' ' -f1)
+
+    if [[ "$actual" != "$hash" ]]; then
+        log "Checksum mismatch: expected $hash, got $actual"
+        return 1
+    fi
+
+    log "Checksum verified: $hash"
+    return 0
+}
+
+# Download and extract the release.
+download_release() {
+    log "Downloading rust-analyzer $RELEASE_TAG from $RELEASE_URL"
+    mkdir -p "$VERSION_DIR"
+
+    local tmp_file="$VERSION_DIR/rust-analyzer.tmp"
+    if ! curl -sfL --retry 3 --retry-delay 5 "$RELEASE_URL" > "$tmp_file"; then
+        rm -f "$tmp_file"
+        die "Failed to download rust-analyzer from $RELEASE_URL"
+    fi
+
+    if ! verify_checksum "$tmp_file" "$RELEASE_DIGEST"; then
+        rm -f "$tmp_file"
+        die "Checksum verification failed for downloaded archive"
+    fi
+
+    if ! gunzip -c "$tmp_file" > "$VERSION_DIR/rust-analyzer" 2>/dev/null; then
+        rm -f "$tmp_file"
+        die "Failed to decompress rust-analyzer archive"
+    fi
+    rm -f "$tmp_file"
+
+    chmod +x "$VERSION_DIR/rust-analyzer"
+    echo "$RELEASE_TAG" > "$VERSION_DIR/.release-tag"
+}
+
+# Verify the downloaded binary is functional.
+verify_binary() {
+    if ! "$VERSION_DIR/rust-analyzer" --version >/dev/null 2>&1; then
+        log "Binary verification failed, removing corrupt download"
+        rm -rf "$VERSION_DIR"
+        die "Downloaded rust-analyzer binary failed verification"
+    fi
+}
+
+# Atomically update the current symlink.
+update_symlink() {
+    local new_link="$RA_DIR/current.new"
+    ln -sfn "$VERSION_DIR" "$new_link"
+
+    # mv -T is atomic on Linux; fall back to regular mv on macOS.
+    if ! mv -T "$new_link" "$RA_DIR/current" 2>/dev/null; then
+        mv "$new_link" "$RA_DIR/current"
+    fi
+
+    log "Updated symlink to $RELEASE_TAG"
+}
+
+# Remove old versions, keeping the most recent N.
+prune_old_versions() {
+    local keep=3
+    local count=0
+
+    # List directories sorted by name (date-based) in reverse order.
+    # Use ls instead of find -printf for macOS compatibility.
+    # shellcheck disable=SC2012  # Version dirs are YYYY-MM-DD, safe for ls.
+    while IFS= read -r dir; do
+        [[ -z "$dir" ]] && continue
+        count=$((count + 1))
+        if [[ $count -gt $keep ]]; then
+            log "Removing old version: $dir"
+            rm -rf "${VERSIONS_DIR:?}/$dir"
+        fi
+    done < <(ls -1 "$VERSIONS_DIR" 2>/dev/null | sort -r)
+}
+
+main() {
+    PLATFORM=$(detect_platform)
+    mkdir -p "$VERSIONS_DIR"
+
+    fetch_release_info
+
+    TODAY=$(date +%Y-%m-%d)
+    VERSION_DIR="$VERSIONS_DIR/$TODAY"
+
+    check_existing
+    download_release
+    verify_binary
+    update_symlink
+    prune_old_versions
+
+    local version
+    version=$("$RA_DIR/current/rust-analyzer" --version 2>/dev/null | head -1)
+    log "Update complete: $version"
+    echo "rust-analyzer updated to $RELEASE_TAG"
+}
+
+main "$@"

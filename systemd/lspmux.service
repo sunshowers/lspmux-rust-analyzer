@@ -1,0 +1,13 @@
+[Unit]
+Description=LSP Multiplexer Server
+Documentation=https://codeberg.org/p2502/lspmux
+
+[Service]
+Type=simple
+ExecStart=LSPMUX_BIN_PLACEHOLDER server
+Restart=on-failure
+RestartSec=5
+Environment=RUST_LOG=info
+
+[Install]
+WantedBy=default.target
