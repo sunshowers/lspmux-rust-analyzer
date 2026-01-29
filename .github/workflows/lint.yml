@@ -7,12 +7,13 @@ on:
     branches: [main]
 
 jobs:
-  shellcheck:
-    name: Shellcheck
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Run shellcheck
-        run: |
-          shellcheck setup bin/update-rust-analyzer plugins/lspmux-rust/bin/*
+      - uses: taiki-e/install-action@just
+
+      - name: Run lints
+        run: just lint
