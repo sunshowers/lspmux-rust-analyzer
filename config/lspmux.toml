@@ -7,11 +7,11 @@ instance_timeout = 300
 # Check for idle servers every 10 seconds.
 gc_interval = 10
 
-# Listen on localhost only (format: [address, port]).
-listen = ["127.0.0.1", 27631]
+# Listen on a Unix domain socket in XDG_RUNTIME_DIR.
+listen = "XDG_RUNTIME_DIR_PLACEHOLDER/lspmux/lspmux.sock"
 
 # Client connection address (should match listen).
-connect = ["127.0.0.1", 27631]
+connect = "XDG_RUNTIME_DIR_PLACEHOLDER/lspmux/lspmux.sock"
 
 # Forward these environment variables to rust-analyzer.
 pass_environment = ["CARGO_HOME", "RUSTUP_HOME", "PATH", "HOME", "USER"]

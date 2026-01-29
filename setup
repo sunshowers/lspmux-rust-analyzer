@@ -9,6 +9,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
 XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 XDG_STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
+# XDG_RUNTIME_DIR is set after platform detection (see set_runtime_dir).
 
 # Installation directories.
 RA_DIR="$XDG_DATA_HOME/lspmux-rust-analyzer"
@@ -43,6 +44,21 @@ detect_platform() {
     esac
 
     info "Detected platform: $PLATFORM_OS-$PLATFORM_ARCH"
+}
+
+# Set XDG_RUNTIME_DIR with platform-appropriate fallback.
+set_runtime_dir() {
+    if [[ -n "${XDG_RUNTIME_DIR:-}" ]]; then
+        return
+    fi
+
+    if [[ "$PLATFORM_OS" == "linux" ]]; then
+        XDG_RUNTIME_DIR="/run/user/$(id -u)"
+    else
+        # macOS: use TMPDIR which is already user-specific.
+        XDG_RUNTIME_DIR="${TMPDIR%/}"
+    fi
+    export XDG_RUNTIME_DIR
 }
 
 # Check for required tools.
@@ -117,7 +133,19 @@ install_config() {
     info "Installing lspmux configuration to $LSPMUX_CONFIG_DIR"
 
     mkdir -p "$LSPMUX_CONFIG_DIR"
-    cp "$SCRIPT_DIR/config/lspmux.toml" "$LSPMUX_CONFIG_DIR/config.toml"
+
+    # Substitute XDG_RUNTIME_DIR in config (lspmux doesn't expand env vars).
+    sed "s|XDG_RUNTIME_DIR_PLACEHOLDER|$XDG_RUNTIME_DIR|g" \
+        "$SCRIPT_DIR/config/lspmux.toml" \
+        > "$LSPMUX_CONFIG_DIR/config.toml"
+
+    # Create socket directory. On Linux with systemd, RuntimeDirectory handles
+    # this, but we create it here for macOS and manual starts.
+    local socket_dir="$XDG_RUNTIME_DIR/lspmux"
+    if [[ ! -d "$socket_dir" ]]; then
+        info "Creating socket directory: $socket_dir"
+        mkdir -p "$socket_dir"
+    fi
 }
 
 # Install systemd services (Linux).
@@ -206,13 +234,17 @@ main() {
     echo "lspmux-rust-analyzer setup"
     echo "=========================="
     echo
-    echo "XDG directories:"
-    echo "  XDG_DATA_HOME:   $XDG_DATA_HOME"
-    echo "  XDG_CONFIG_HOME: $XDG_CONFIG_HOME"
-    echo "  XDG_STATE_HOME:  $XDG_STATE_HOME"
-    echo
 
     detect_platform
+    set_runtime_dir
+
+    echo "XDG directories:"
+    echo "  XDG_DATA_HOME:    $XDG_DATA_HOME"
+    echo "  XDG_CONFIG_HOME:  $XDG_CONFIG_HOME"
+    echo "  XDG_STATE_HOME:   $XDG_STATE_HOME"
+    echo "  XDG_RUNTIME_DIR:  $XDG_RUNTIME_DIR"
+    echo
+
     check_dependencies
 
     install_update_script

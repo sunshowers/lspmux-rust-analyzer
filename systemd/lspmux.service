@@ -8,6 +8,8 @@ ExecStart=LSPMUX_BIN_PLACEHOLDER server
 Restart=on-failure
 RestartSec=5
 Environment=RUST_LOG=info
+# Creates $XDG_RUNTIME_DIR/lspmux for the Unix socket.
+RuntimeDirectory=lspmux
 
 [Install]
 WantedBy=default.target
